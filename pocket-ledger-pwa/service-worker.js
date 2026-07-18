@@ -2,7 +2,7 @@
 // Caches the static app shell so the app opens and works offline once
 // installed. All actual data stays in IndexedDB (unaffected by this cache).
 
-const CACHE_NAME = "pocket-ledger-shell-v1";
+const CACHE_NAME = "pocket-ledger-shell-v2";
 const APP_SHELL = [
   "./index.html",
   "./manifest.json",
@@ -33,26 +33,43 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Cache-first for the app shell, falling back to network (and updating the
-// cache in the background) for everything else — e.g. Google Fonts, the
-// AdSense script, and any future asset. This keeps the app fully usable
-// offline while still picking up shell updates on the next successful visit.
+// Network-first, falling back to cache, and always resolving to a real
+// Response — never `undefined` — since respondWith(undefined) is exactly
+// what produces Chrome's ERR_FAILED. A network hiccup on a fresh install
+// (nothing cached yet) previously fell through to nothing at all.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200 && event.request.url.startsWith(self.location.origin)) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
+    (async () => {
+      try {
+        const networkResponse = await fetch(event.request);
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          event.request.url.startsWith(self.location.origin)
+        ) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (err) {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
 
-      return cached || networkFetch;
-    })
+        // Navigations (opening the app itself) get the cached app shell as
+        // a last resort so the app still opens offline instead of failing.
+        if (event.request.mode === "navigate") {
+          const shell = await caches.match("./index.html");
+          if (shell) return shell;
+        }
+
+        // Absolute last resort: a real Response object, never undefined.
+        return new Response(
+          "Pocket Ledger is offline and this resource isn't cached yet.",
+          { status: 503, statusText: "Service Unavailable", headers: { "Content-Type": "text/plain" } }
+        );
+      }
+    })()
   );
 });
