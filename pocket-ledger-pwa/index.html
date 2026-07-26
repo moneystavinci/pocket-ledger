@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Pocket Ledger</title>
 
-<!-- PWA: installability + home-screen behavior -->
+<!-- PWA: installability + offline-first behavior -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1F2A24">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -18,17 +18,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
-<!--
-  GOOGLE ADSENSE SETUP
-  1. Once your AdSense account is approved, replace ca-pub-XXXXXXXXXXXXXXXX
-     below (and in the <ins> tag near the bottom of <body>) with your real
-     publisher ID from the AdSense dashboard.
-  2. Replace YOUR_AD_SLOT_ID in the <ins> tag with the ad unit's slot ID.
-  3. Until those are real values, this script will simply fail to load
-     (harmless) and the reserved ad-slot space will render blank.
--->
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
 <style>
   :root{
     --paper: #EDE8DA;
@@ -73,6 +62,16 @@
   }
   .header-btn:active{transform:translateY(1px);}
   .header-btn svg{width:17px; height:17px;}
+
+  /* ---------- Offline status pill ---------- */
+  .status-pill{
+    display:none; align-items:center; gap:6px; margin:8px 20px 0;
+    padding:6px 12px; border-radius:14px; background:var(--owing-tint); color:var(--owing);
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    width:fit-content;
+  }
+  .status-pill.show{display:flex;}
+  .status-pill .dot{width:7px; height:7px; border-radius:50%; background:var(--owing); flex-shrink:0;}
 
   /* ---------- Install banner ---------- */
   .install-banner{
@@ -225,13 +224,9 @@
   /* ---------- Ad slot ---------- */
   .ad-slot{
     position:sticky; bottom:0; left:0; right:0; height:50px; background:#DCD5C2; border-top:1px solid var(--rule-strong);
-    display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative;
+    display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+    color:var(--ink-soft); letter-spacing:.05em;
   }
-  .ad-slot .ad-fallback{
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--ink-soft); letter-spacing:.05em; z-index:1;
-  }
-  .ad-slot ins.adsbygoogle{ position:relative; z-index:2; display:inline-block; width:320px; height:50px; }
 
   /* ---------- Modal ---------- */
   .modal-scrim{position:fixed; inset:0; background:rgba(31,42,36,0.45); display:none; align-items:flex-end; justify-content:center; z-index:50;}
@@ -283,6 +278,8 @@
 <body>
 
 <div id="app">
+
+  <div class="status-pill" id="offlinePill"><span class="dot"></span><span>Offline — changes save locally</span></div>
 
   <!-- ===================== HOME VIEW ===================== -->
   <div id="homeView">
@@ -383,15 +380,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
 
-  <div class="ad-slot">
-    <span class="ad-fallback">— Ad space (320×50) —</span>
-    <!-- Replace ca-pub-XXXXXXXXXXXXXXXX and YOUR_AD_SLOT_ID with your real
-         AdSense publisher ID and ad unit slot ID once approved. -->
-    <ins class="adsbygoogle"
-         style="display:inline-block;width:320px;height:50px"
-         data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-         data-ad-slot="YOUR_AD_SLOT_ID"></ins>
-  </div>
+  <div class="ad-slot">— Ad space (320×50) —</div>
 </div>
 
 <!-- ===================== ADD ACCOUNT MODAL ===================== -->
@@ -1118,6 +1107,25 @@
     toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
   }
 
+  /* ============ Online / offline status ============ */
+  // Data entry (accounts, entries, balances) lives entirely in IndexedDB and
+  // works identically online or offline — nothing about it needs a network
+  // connection. This pill exists purely as a visible signal for the person
+  // using the app, and as the single source of truth other code can check
+  // before attempting anything that genuinely needs a connection (currently:
+  // nothing in the core app does — web fonts and the ad slot are the only
+  // network-dependent pieces, and both already degrade silently).
+  function updateOnlineStatus(){
+    const pill = $("#offlinePill");
+    if(navigator.onLine){
+      pill.classList.remove("show");
+    } else {
+      pill.classList.add("show");
+    }
+  }
+  window.addEventListener("online", updateOnlineStatus);
+  window.addEventListener("offline", updateOnlineStatus);
+
   /* ============ PWA: install prompt + service worker ============ */
   const INSTALL_DISMISS_KEY = "pocket_ledger_install_dismissed";
   let deferredInstallPrompt = null;
@@ -1138,6 +1146,7 @@
   function showInstallBanner(mode){
     if(isStandaloneDisplay() || installDismissed()) return;
     const banner = $("#installBanner");
+    if(!banner) return;
     if(mode === "ios"){
       $("#installBannerText").textContent = 'Install: tap Share, then "Add to Home Screen."';
       $("#installBtn").style.display = "none";
@@ -1155,23 +1164,27 @@
   });
 
   window.addEventListener("appinstalled", () => {
-    $("#installBanner").style.display = "none";
+    const banner = $("#installBanner");
+    if(banner) banner.style.display = "none";
     deferredInstallPrompt = null;
     showToast("Pocket Ledger installed");
   });
 
-  $("#installBtn").addEventListener("click", async () => {
-    if(!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    $("#installBanner").style.display = "none";
-  });
-
-  $("#dismissInstallBtn").addEventListener("click", () => {
-    $("#installBanner").style.display = "none";
-    setInstallDismissed();
-  });
+  if($("#installBtn")){
+    $("#installBtn").addEventListener("click", async () => {
+      if(!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      $("#installBanner").style.display = "none";
+    });
+  }
+  if($("#dismissInstallBtn")){
+    $("#dismissInstallBtn").addEventListener("click", () => {
+      $("#installBanner").style.display = "none";
+      setInstallDismissed();
+    });
+  }
 
   if(isIosDevice()) showInstallBanner("ios");
 
@@ -1189,19 +1202,11 @@
     if(currentView === "home") renderHome();
   }
 
-  // Requests an ad fill for the banner slot. Harmless no-op until real
-  // data-ad-client / data-ad-slot values are set above — it just queues
-  // a request that never resolves, and the fallback label stays visible.
-  try {
-    (window.adsbygoogle = window.adsbygoogle || []).push({});
-  } catch(e) {
-    console.warn("AdSense request failed:", e);
-  }
-
   openDb().then(async (database) => {
     db = database;
     await refresh();
     renderHome();
+    updateOnlineStatus();
   }).catch(err => {
     console.error("IndexedDB failed to open:", err);
     document.getElementById("accountList").innerHTML =
