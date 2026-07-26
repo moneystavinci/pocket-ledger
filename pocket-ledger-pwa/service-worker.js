@@ -1,8 +1,20 @@
 // Pocket Ledger service worker
-// Caches the static app shell so the app opens and works offline once
-// installed. All actual data stays in IndexedDB (unaffected by this cache).
+//
+// Goal: the app shell (index.html + everything it needs to render and let
+// you enter data) must load with ZERO network dependency, every time,
+// instantly. All actual ledger data lives in IndexedDB — untouched by this
+// file and already fully offline-capable on its own. This worker's only job
+// is making sure the *page itself* is available offline too.
+//
+// Strategy: cache-first for the app shell. We don't wait on a network
+// round-trip before deciding whether to serve the cached copy — that would
+// mean a slow or flaky connection (weak signal, captive portal, airplane
+// mode toggling) delays or blocks opening the app. Instead: serve from
+// cache immediately if present, and separately refresh the cache in the
+// background from the network when available, so the next offline launch
+// always has the most recent successfully-fetched version.
 
-const CACHE_NAME = "pocket-ledger-shell-v2";
+const CACHE_NAME = "pocket-ledger-shell-v3";
 const APP_SHELL = [
   "./index.html",
   "./manifest.json",
@@ -33,40 +45,52 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first, falling back to cache, and always resolving to a real
-// Response — never `undefined` — since respondWith(undefined) is exactly
-// what produces Chrome's ERR_FAILED. A network hiccup on a fresh install
-// (nothing cached yet) previously fell through to nothing at all.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  const isSameOrigin = event.request.url.startsWith(self.location.origin);
+
   event.respondWith(
     (async () => {
+      // Cache-first for anything we own (the app shell). This is what makes
+      // the app open instantly offline, with no network wait at all.
+      const cached = await caches.match(event.request);
+      if (cached) {
+        // Refresh the cache in the background for next time, but don't make
+        // this request wait on it — the person already has their answer.
+        if (isSameOrigin) {
+          fetch(event.request)
+            .then((response) => {
+              if (response && response.status === 200) {
+                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response));
+              }
+            })
+            .catch(() => { /* offline — nothing to refresh with, that's fine */ });
+        }
+        return cached;
+      }
+
+      // Not cached yet — try the network (e.g. Google Fonts, the AdSense
+      // script, or a first-ever visit to a new page in this app).
       try {
         const networkResponse = await fetch(event.request);
-        if (
-          networkResponse &&
-          networkResponse.status === 200 &&
-          event.request.url.startsWith(self.location.origin)
-        ) {
+        if (networkResponse && networkResponse.status === 200 && isSameOrigin) {
           const cache = await caches.open(CACHE_NAME);
           cache.put(event.request, networkResponse.clone());
         }
         return networkResponse;
       } catch (err) {
-        const cached = await caches.match(event.request);
-        if (cached) return cached;
-
-        // Navigations (opening the app itself) get the cached app shell as
-        // a last resort so the app still opens offline instead of failing.
+        // Truly nothing available. For navigations (opening the app itself)
+        // fall back to the cached shell so the app still opens rather than
+        // showing a browser error page.
         if (event.request.mode === "navigate") {
           const shell = await caches.match("./index.html");
           if (shell) return shell;
         }
-
-        // Absolute last resort: a real Response object, never undefined.
+        // Absolute last resort: always a real Response, never undefined —
+        // handing back nothing is exactly what produces a browser ERR_FAILED.
         return new Response(
-          "Pocket Ledger is offline and this resource isn't cached yet.",
+          "Offline and this resource isn't cached yet.",
           { status: 503, statusText: "Service Unavailable", headers: { "Content-Type": "text/plain" } }
         );
       }
