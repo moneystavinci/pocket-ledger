@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Pocket Ledger</title>
+
+<!-- PWA: installability + offline-first behavior -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F2A24">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper: #EDE8DA;
+    --paper-raised: #F4F0E4;
+    --ink: #1F2A24;
+    --ink-soft: #52584f;
+    --rule: #C9C0AC;
+    --rule-strong: #a89f89;
+    --owed: #2F6F4E;
+    --owed-tint: #e2ece5;
+    --owing: #A63D33;
+    --owing-tint: #f2e1de;
+    --settled: #8a8370;
+    --settled-tint: #e8e3d3;
+    --gold: #B08A3E;
+  }
+
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0; padding:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif;}
+  .mono{font-family:'IBM Plex Mono', monospace;}
+  .serif{font-family:'Fraunces', serif;}
+
+  #app{max-width:640px; margin:0 auto; min-height:100vh; background:var(--paper); position:relative; border-left:1px solid var(--rule); border-right:1px solid var(--rule);}
+
+  /* ---------- Masthead ---------- */
+  header.masthead{padding:22px 20px 16px; border-bottom:2px solid var(--ink);}
+  .masthead-row{display:flex; align-items:flex-start; gap:10px;}
+  .masthead-title{flex:1; min-width:0;}
+  header.masthead .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft);
+    display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  }
+  header.masthead .eyebrow span:last-child{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  header.masthead h1{
+    font-family:'Fraunces', serif; font-weight:700; font-size:30px; margin:4px 0 0; letter-spacing:-.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .header-btn{
+    flex-shrink:0; width:38px; height:38px; border-radius:50%;
+    border:1.5px solid var(--ink); background:var(--paper-raised);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink);
+  }
+  .header-btn:active{transform:translateY(1px);}
+  .header-btn svg{width:17px; height:17px;}
+
+  /* ---------- Offline status pill ---------- */
+  .status-pill{
+    display:none; align-items:center; gap:6px; margin:8px 20px 0;
+    padding:6px 12px; border-radius:14px; background:var(--owing-tint); color:var(--owing);
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    width:fit-content;
+  }
+  .status-pill.show{display:flex;}
+  .status-pill .dot{width:7px; height:7px; border-radius:50%; background:var(--owing); flex-shrink:0;}
+
+  /* ---------- Install banner ---------- */
+  .install-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 20px; background:var(--gold); color:var(--ink);
+    font-size:12.5px; border-bottom:1px solid var(--rule-strong);
+  }
+  .install-banner span{flex:1; line-height:1.35;}
+  .install-banner-actions{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .install-banner-actions button{
+    border:none; border-radius:14px; cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  #installBtn{
+    background:var(--ink); color:var(--paper); font-size:12px; font-weight:600; padding:6px 14px;
+  }
+  #installBtn:active{transform:translateY(1px);}
+  #dismissInstallBtn{
+    background:transparent; color:var(--ink); font-size:15px; width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center; opacity:0.7;
+  }
+
+  /* ---------- Tally cards (home only) ---------- */
+  .tally-row{display:grid; grid-template-columns:1fr 1fr; border-bottom:2px solid var(--ink);}
+  .tally{padding:16px 20px; border-right:1px solid var(--rule-strong);}
+  .tally:last-child{border-right:none;}
+  .tally .label{font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft);}
+  .tally .amount{font-family:'IBM Plex Mono', monospace; font-size:26px; font-weight:600; margin-top:4px;}
+  .tally.owe .amount{color:var(--owing);}
+  .tally.owed .amount{color:var(--owed);}
+
+  /* ---------- Filter tabs (home only) ---------- */
+  .tabs{display:flex; border-bottom:1px solid var(--rule-strong); background:var(--paper-raised);}
+  .tab{
+    flex:1; text-align:center; padding:11px 8px; font-family:'IBM Plex Mono', monospace; font-size:11px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); cursor:pointer;
+    border-right:1px solid var(--rule); user-select:none;
+  }
+  .tab:last-child{border-right:none;}
+  .tab.active{color:var(--ink); background:var(--paper); font-weight:600; box-shadow:inset 0 -2px 0 var(--gold);}
+
+  /* ---------- Balance summary (account detail only) ---------- */
+  .balance-hero{
+    padding:22px 20px 20px; border-bottom:2px solid var(--ink); text-align:center;
+    background:var(--paper-raised);
+  }
+  .balance-hero .acct-name{font-family:'Fraunces', serif; font-size:22px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:8px;}
+  .balance-hero .acct-name .edit-name-btn{
+    width:24px; height:24px; border-radius:50%; border:1px solid var(--rule-strong); background:var(--paper);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink-soft); flex-shrink:0;
+  }
+  .balance-hero .acct-name .edit-name-btn svg{width:11px; height:11px;}
+  .balance-hero .label{font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin-top:10px;}
+  .balance-hero .amount{font-family:'IBM Plex Mono', monospace; font-size:34px; font-weight:600; margin-top:2px;}
+  .balance-hero .amount.owed{color:var(--owed);}
+  .balance-hero .amount.owing{color:var(--owing);}
+  .balance-hero .amount.settled{color:var(--settled);}
+  .balance-hero .since{font-size:11.5px; color:var(--ink-soft); margin-top:6px; font-family:'IBM Plex Mono', monospace;}
+  .balance-hero .acct-desc{font-size:13px; color:var(--ink-soft); margin-top:8px; font-style:italic; padding:0 20px;}
+
+  .section-heading{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-soft); padding:16px 20px 0; background:var(--paper-raised);
+  }
+
+  /* ---------- Lists (ruled paper) ---------- */
+  #ledger{padding-bottom:110px; background-image: repeating-linear-gradient(to bottom, transparent 0px, transparent 47px, var(--rule) 47px, var(--rule) 48px);}
+  .date-heading{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--gold); padding:14px 20px 4px; background:var(--paper);
+  }
+  .empty-state{padding:60px 30px; text-align:center; color:var(--ink-soft);}
+  .empty-state .serif{font-size:19px; color:var(--ink); display:block; margin-bottom:6px;}
+
+  .row{display:flex; align-items:center; gap:12px; padding:11px 20px; min-height:52px; cursor:pointer;}
+  .row .details{flex:1; min-width:0;}
+  .row .agent{font-weight:600; font-size:15px;}
+  .row .job{font-size:12.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row .net{font-family:'IBM Plex Mono', monospace; font-size:13px; font-weight:600; flex-shrink:0;}
+  .row .net.owed{color:var(--owed);}
+  .row .net.owing{color:var(--owing);}
+  .row .net.settled{color:var(--settled);}
+
+  .stamp{
+    font-family:'IBM Plex Mono', monospace; font-size:9.5px; font-weight:600; letter-spacing:.08em;
+    padding:4px 8px; border-radius:3px; border:1.5px solid currentColor;
+    outline:1px solid currentColor; outline-offset:2px; transform:rotate(-6deg);
+    white-space:nowrap; flex-shrink:0;
+  }
+  .stamp.owed{color:var(--owed); background:var(--owed-tint);}
+  .stamp.owing{color:var(--owing); background:var(--owing-tint);}
+  .stamp.settled{color:var(--settled); background:var(--settled-tint);}
+
+  /* entry row (account detail ledger table) */
+  .ledger-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .ledger-inner{min-width:660px;}
+  .entry-row{display:flex; align-items:flex-start; gap:10px; padding:11px 20px; min-height:52px; cursor:pointer;}
+  .entry-row .edate{width:64px; flex-shrink:0; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); padding-top:1px;}
+  .entry-row .edesc{
+    width:260px; flex-shrink:0; font-size:13.5px; white-space:normal; word-break:break-word; overflow-wrap:break-word; line-height:1.35;
+  }
+  .entry-row .cols{display:flex; gap:10px; flex-shrink:0;}
+  .entry-row .col{font-family:'IBM Plex Mono', monospace; font-size:12.5px; width:82px; text-align:right; padding-top:1px;}
+  .entry-row .col.debit{color:var(--owing);}
+  .entry-row .col.credit{color:var(--owed);}
+  .entry-row .col.empty{color:var(--rule-strong);}
+  .entry-row .running{width:88px; text-align:right; font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600; color:var(--ink-soft); flex-shrink:0; padding-top:1px;}
+  .ledger-col-heads{
+    display:flex; gap:10px; padding:8px 20px 6px; font-family:'IBM Plex Mono', monospace; font-size:9.5px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); background:var(--paper-raised);
+    border-bottom:1px solid var(--rule-strong);
+  }
+  .ledger-col-heads .lh-date{width:64px; flex-shrink:0;}
+  .ledger-col-heads .lh-desc{width:260px; flex-shrink:0;}
+  .ledger-col-heads .lh-debit, .ledger-col-heads .lh-credit{width:82px; text-align:right; flex-shrink:0;}
+  .ledger-col-heads .lh-running{width:88px; text-align:right; flex-shrink:0;}
+  .scroll-hint{
+    font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft);
+    padding:6px 20px 0; display:none;
+  }
+  @media (max-width:680px){ .scroll-hint{display:block;} }
+
+  /* ---------- PDF export (print-only view) ---------- */
+  #printArea{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{display:block; position:absolute; top:0; left:0; width:100%; padding:0; margin:0;}
+    .print-header{margin-bottom:18px;}
+    .print-header h1{font-family:'Fraunces', serif; font-size:22px; margin:0 0 4px;}
+    .print-header .meta{font-family:'IBM Plex Mono', monospace; font-size:11px; color:#444; margin:2px 0;}
+    .print-header .balance{font-family:'IBM Plex Mono', monospace; font-size:16px; font-weight:600; margin-top:6px;}
+    table.print-table{width:100%; border-collapse:collapse; font-family:'Inter',sans-serif; font-size:11.5px;}
+    table.print-table th, table.print-table td{
+      border:1px solid #999; padding:6px 8px; text-align:left; vertical-align:top; white-space:normal; word-break:break-word;
+    }
+    table.print-table th{background:#eee; font-family:'IBM Plex Mono', monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em;}
+    table.print-table td.num, table.print-table th.num{text-align:right; font-family:'IBM Plex Mono', monospace;}
+  }
+
+  /* ---------- FAB ---------- */
+  .fab{
+    position:fixed; bottom:24px; right:20px;
+    width:56px; height:56px; border-radius:50%; background:var(--ink); color:var(--paper);
+    display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(31,42,36,0.35);
+    cursor:pointer; border:none; z-index:20;
+  }
+  .fab svg{width:24px; height:24px;}
+  .fab:active{transform:scale(0.96);}
+
+  /* ---------- Ad slot ---------- */
+  .ad-slot{
+    position:sticky; bottom:0; left:0; right:0; height:50px; background:#DCD5C2; border-top:1px solid var(--rule-strong);
+    display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+    color:var(--ink-soft); letter-spacing:.05em;
+  }
+
+  /* ---------- Modal ---------- */
+  .modal-scrim{position:fixed; inset:0; background:rgba(31,42,36,0.45); display:none; align-items:flex-end; justify-content:center; z-index:50;}
+  .modal-scrim.open{display:flex;}
+  .card{
+    width:100%; max-width:640px; max-height:88vh; overflow-y:auto; background:var(--paper-raised);
+    border-top:3px solid var(--ink); border-radius:10px 10px 0 0; padding:20px 20px 28px;
+  }
+  .card-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .card-head h2{font-family:'Fraunces', serif; font-size:20px; margin:0; font-weight:600;}
+  .close-btn{width:32px; height:32px; border-radius:50%; border:1px solid var(--rule-strong); background:var(--paper); display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .close-btn svg{width:14px; height:14px;}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:5px;}
+  .field input[type=text], .field input[type=number], .field input[type=date]{
+    width:100%; padding:10px 12px; font-size:15px; font-family:'Inter',sans-serif; border:1.5px solid var(--rule-strong);
+    border-radius:6px; background:var(--paper); color:var(--ink);
+  }
+  .field input:focus{outline:2px solid var(--gold); outline-offset:1px; border-color:var(--gold);}
+  .amounts-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .amounts-row .field label.debit{color:var(--owing);}
+  .amounts-row .field label.credit{color:var(--owed);}
+
+  .balance-preview{
+    padding:10px 14px; border:1.5px dashed var(--rule-strong); border-radius:6px; margin-bottom:14px;
+    display:flex; align-items:center; justify-content:space-between; font-family:'IBM Plex Mono', monospace; font-size:13px;
+  }
+  .balance-preview .val{font-weight:600;}
+  .balance-preview .val.owed{color:var(--owed);}
+  .balance-preview .val.owing{color:var(--owing);}
+  .balance-preview .val.settled{color:var(--settled);}
+
+  .error-msg{color:var(--owing); font-size:12.5px; margin:-4px 0 14px; font-family:'Inter',sans-serif;}
+  .save-btn{width:100%; padding:14px; border:none; border-radius:7px; background:var(--ink); color:var(--paper); font-weight:600; font-size:15px; cursor:pointer; margin-top:6px;}
+  .save-btn:active{transform:translateY(1px);}
+  .danger-link{display:block; text-align:center; margin-top:12px; color:var(--owing); font-family:'IBM Plex Mono', monospace; font-size:11.5px; letter-spacing:.05em; cursor:pointer; background:none; border:none; width:100%; padding:8px;}
+
+  .toast{
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--paper);
+    padding:10px 18px; border-radius:20px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+    z-index:60; white-space:nowrap;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-4px);}
+
+  #accountView{display:none;}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="status-pill" id="offlinePill"><span class="dot"></span><span>Offline — changes save locally</span></div>
+
+  <!-- ===================== HOME VIEW ===================== -->
+  <div id="homeView">
+    <header class="masthead">
+      <div class="masthead-row">
+        <div class="masthead-title">
+          <div class="eyebrow">
+            <span>Pocket Ledger</span>
+            <span id="acctCount">0 accounts</span>
+          </div>
+          <h1>Accounts</h1>
+        </div>
+        <button class="header-btn" id="clearAllBtn" title="Clear records for settled accounts" aria-label="Clear records for settled accounts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button class="header-btn" id="exportBtn" title="Export all to CSV" aria-label="Export all to CSV">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="install-banner" id="installBanner" style="display:none;">
+      <span id="installBannerText">Install Pocket Ledger for quick access from your home screen.</span>
+      <div class="install-banner-actions">
+        <button id="installBtn">Install</button>
+        <button id="dismissInstallBtn" aria-label="Dismiss">✕</button>
+      </div>
+    </div>
+
+    <div class="tally-row">
+      <div class="tally owe">
+        <div class="label">You Owe</div>
+        <div class="amount mono" id="totalOwe">$0.00</div>
+      </div>
+      <div class="tally owed">
+        <div class="label">Owed To You</div>
+        <div class="amount mono" id="totalOwed">$0.00</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-filter="ALL">All</div>
+      <div class="tab" data-filter="OWE">You Owe</div>
+      <div class="tab" data-filter="OWED">Owed To You</div>
+    </div>
+
+    <div id="accountList"></div>
+  </div>
+
+  <!-- ===================== ACCOUNT DETAIL VIEW ===================== -->
+  <div id="accountView">
+    <header class="masthead">
+      <div class="masthead-row">
+        <button class="header-btn" id="backBtn" title="Back to accounts" aria-label="Back to accounts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="masthead-title">
+          <div class="eyebrow">
+            <span>Pocket Ledger</span>
+            <span id="entryCount">0 entries</span>
+          </div>
+        </div>
+        <button class="header-btn" id="exportPdfBtn" title="Export transactions as PDF" aria-label="Export transactions as PDF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M15 2v5h5"/><path d="M8 13h8M8 17h5"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="balance-hero">
+      <div class="acct-name">
+        <span id="acctDetailName">Account</span>
+        <button class="edit-name-btn" id="editNameBtn" aria-label="Edit account">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+      </div>
+      <div class="label">Account Balance</div>
+      <div class="amount mono" id="acctDetailBalance">$0.00</div>
+      <div class="since" id="acctDetailSince"></div>
+      <div class="acct-desc" id="acctDetailDesc" style="display:none;"></div>
+    </div>
+
+    <div class="section-heading">Transactions</div>
+    <div class="scroll-hint">← scroll horizontally to see all columns →</div>
+    <div class="ledger-scroll">
+      <div class="ledger-inner">
+        <div class="ledger-col-heads">
+          <div class="lh-date">Date</div>
+          <div class="lh-desc">Description</div>
+          <div class="lh-debit">Owing</div>
+          <div class="lh-credit">Owed</div>
+          <div class="lh-running">Balance</div>
+        </div>
+        <div id="ledger"></div>
+      </div>
+    </div>
+  </div>
+
+  <button class="fab" id="fabAdd" aria-label="Add">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <div class="ad-slot">— Ad space (320×50) —</div>
+</div>
+
+<!-- ===================== ADD ACCOUNT MODAL ===================== -->
+<div class="modal-scrim" id="accountModalScrim">
+  <div class="card">
+    <div class="card-head">
+      <h2 class="serif">New Account</h2>
+      <button class="close-btn" id="closeAccountModal" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label for="aName">Account Name</label>
+      <input type="text" id="aName" placeholder="e.g. Tendai M.">
+    </div>
+    <div class="field">
+      <label for="aDesc">Description</label>
+      <input type="text" id="aDesc" placeholder="e.g. Photo agent, downtown route">
+    </div>
+    <div class="field">
+      <label for="aDate">Balance Date</label>
+      <input type="date" id="aDate">
+    </div>
+    <div class="field amounts-row">
+      <div>
+        <label for="aDebit" class="debit">Debit — Owing</label>
+        <input type="number" id="aDebit" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+      <div>
+        <label for="aCredit" class="credit">Credit — Owed</label>
+        <input type="number" id="aCredit" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="balance-preview">
+      <span>Account Balance</span>
+      <span class="val settled" id="aBalancePreview">$0.00</span>
+    </div>
+
+    <div class="error-msg" id="accountFormError" style="display:none;"></div>
+    <button class="save-btn" id="saveAccountBtn">Save Account</button>
+  </div>
+</div>
+
+<!-- ===================== EDIT ACCOUNT MODAL ===================== -->
+<div class="modal-scrim" id="renameModalScrim">
+  <div class="card">
+    <div class="card-head">
+      <h2 class="serif">Edit Account</h2>
+      <button class="close-btn" id="closeRenameModal" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="field">
+      <label for="rName">Account Name</label>
+      <input type="text" id="rName">
+    </div>
+    <div class="field">
+      <label for="rDesc">Description</label>
+      <input type="text" id="rDesc" placeholder="e.g. Photo agent, downtown route">
+    </div>
+    <div class="error-msg" id="renameFormError" style="display:none;"></div>
+    <button class="save-btn" id="saveRenameBtn">Save Changes</button>
+    <button class="danger-link" id="clearHistoryBtn">Clear this account's history</button>
+    <button class="danger-link" id="deleteAccountBtn">Delete this account</button>
+  </div>
+</div>
+
+<!-- ===================== ADD / EDIT ENTRY MODAL ===================== -->
+<div class="modal-scrim" id="entryModalScrim">
+  <div class="card">
+    <div class="card-head">
+      <h2 id="entryFormTitle" class="serif">Add Entry</h2>
+      <button class="close-btn" id="closeEntryModal" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label for="eDate">Entry Date</label>
+      <input type="date" id="eDate">
+    </div>
+    <div class="field">
+      <label for="eDesc">Description</label>
+      <input type="text" id="eDesc" placeholder="e.g. Passport photo batch">
+    </div>
+    <div class="field amounts-row">
+      <div>
+        <label for="eDebit" class="debit">Debit — Owing</label>
+        <input type="number" id="eDebit" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+      <div>
+        <label for="eCredit" class="credit">Credit — Owed</label>
+        <input type="number" id="eCredit" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="balance-preview">
+      <span>Balance After Entry</span>
+      <span class="val settled" id="eBalancePreview">$0.00</span>
+    </div>
+
+    <div class="error-msg" id="entryFormError" style="display:none;"></div>
+    <button class="save-btn" id="saveEntryBtn">Save Entry</button>
+    <button class="danger-link" id="deleteEntryBtn" style="display:none;">Delete this entry</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="printArea"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ IndexedDB layer ============ */
+  const DB_NAME = "pocket_ledger_accounts_db";
+  const ACCOUNTS = "accounts";
+  const ENTRIES = "entries";
+  let db;
+
+  function openDb(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = (e) => {
+        const database = e.target.result;
+        if(!database.objectStoreNames.contains(ACCOUNTS)){
+          database.createObjectStore(ACCOUNTS, {keyPath:"id", autoIncrement:true});
+        }
+        if(!database.objectStoreNames.contains(ENTRIES)){
+          const store = database.createObjectStore(ENTRIES, {keyPath:"id", autoIncrement:true});
+          store.createIndex("accountId", "accountId");
+        }
+      };
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror = (e) => reject(e.target.error);
+    });
+  }
+
+  function storeTx(name, mode){ return db.transaction(name, mode).objectStore(name); }
+
+  function getAll(storeName){
+    return new Promise((resolve, reject) => {
+      const req = storeTx(storeName, "readonly").getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function put(storeName, obj){
+    return new Promise((resolve, reject) => {
+      const req = storeTx(storeName, "readwrite").put(obj);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function remove(storeName, id){
+    return new Promise((resolve, reject) => {
+      const req = storeTx(storeName, "readwrite").delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /* ============ App state ============ */
+  let accounts = [];
+  let entries = [];
+  let currentFilter = "ALL";
+  let currentView = "home"; // "home" | "account"
+  let activeAccountId = null;
+  let editingEntryId = null;
+
+  const $ = (sel) => document.querySelector(sel);
+  const fmtMoney = (n) => "$" + (Number(n)||0).toFixed(2);
+
+  function todayDateInputValue(){
+    const d = new Date();
+    const off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off*60000).toISOString().slice(0,10);
+  }
+  function dateMillisFromInput(value){
+    const [y,m,d] = value.split("-").map(Number);
+    return new Date(y, m-1, d).getTime();
+  }
+  function dateInputValueFromMillis(millis){
+    const d = new Date(millis);
+    const off = d.getTimezoneOffset();
+    return new Date(d.getTime() - off*60000).toISOString().slice(0,10);
+  }
+  function dateHeadingLabel(millis){
+    return new Date(millis).toLocaleDateString("en-US", {weekday:"short", month:"short", day:"numeric", year:"numeric"});
+  }
+  function shortDate(millis){
+    return new Date(millis).toLocaleDateString("en-US", {month:"short", day:"numeric"});
+  }
+  function escapeHtml(str){
+    const div = document.createElement("div");
+    div.textContent = str == null ? "" : str;
+    return div.innerHTML;
+  }
+  function balanceClass(bal){
+    if(bal > 0.004) return "owed";
+    if(bal < -0.004) return "owing";
+    return "settled";
+  }
+  function balanceStampLabel(bal){
+    if(bal > 0.004) return "OWED";
+    if(bal < -0.004) return "OWING";
+    return "SETTLED";
+  }
+
+  function entriesForAccount(accountId){
+    return entries.filter(e => e.accountId === accountId);
+  }
+
+  function accountBalance(accountId){
+    const list = entriesForAccount(accountId);
+    return list.reduce((s,e) => s + (e.credit||0) - (e.debit||0), 0);
+  }
+
+  function lastActivityMillis(accountId){
+    const list = entriesForAccount(accountId);
+    if(list.length === 0) return null;
+    return Math.max(...list.map(e => e.dateMillis));
+  }
+
+  /* ============ Home rendering ============ */
+  function renderHome(){
+    const balances = accounts.map(a => ({acct:a, bal: accountBalance(a.id)}));
+
+    const totalOwe = balances.filter(x => x.bal < 0).reduce((s,x) => s + Math.abs(x.bal), 0);
+    const totalOwed = balances.filter(x => x.bal > 0).reduce((s,x) => s + x.bal, 0);
+    $("#totalOwe").textContent = fmtMoney(totalOwe);
+    $("#totalOwed").textContent = fmtMoney(totalOwed);
+    $("#acctCount").textContent = accounts.length + (accounts.length === 1 ? " account" : " accounts");
+
+    let visible = balances;
+    if(currentFilter === "OWE") visible = balances.filter(x => x.bal < -0.004);
+    if(currentFilter === "OWED") visible = balances.filter(x => x.bal > 0.004);
+
+    visible = visible.slice().sort((a,b) => a.acct.name.localeCompare(b.acct.name));
+
+    const listEl = $("#accountList");
+    listEl.innerHTML = "";
+
+    if(visible.length === 0){
+      listEl.innerHTML = `<div class="empty-state">
+        <span class="serif">${accounts.length === 0 ? "No accounts yet" : "No accounts in this view"}</span>
+        ${accounts.length === 0 ? "Tap the + button to add your first account." : "Try a different filter."}
+      </div>`;
+      return;
+    }
+
+    visible.forEach(({acct, bal}) => {
+      const cls = balanceClass(bal);
+      const last = lastActivityMillis(acct.id);
+      const secondaryLine = acct.description
+        ? escapeHtml(acct.description)
+        : (last ? "Last activity " + shortDate(last) : "No entries yet");
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
+        <div class="details">
+          <div class="agent">${escapeHtml(acct.name)}</div>
+          <div class="job">${secondaryLine}</div>
+        </div>
+        <div class="stamp ${cls}">${balanceStampLabel(bal)}</div>
+        <div class="net mono ${cls}">${fmtMoney(Math.abs(bal))}</div>
+      `;
+      row.addEventListener("click", () => openAccountView(acct.id));
+      listEl.appendChild(row);
+    });
+  }
+
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentFilter = tab.dataset.filter;
+      renderHome();
+    });
+  });
+
+  /* ============ Account detail rendering ============ */
+  function openAccountView(accountId){
+    activeAccountId = accountId;
+    currentView = "account";
+    $("#homeView").style.display = "none";
+    $("#accountView").style.display = "block";
+    renderAccountView();
+  }
+
+  function closeAccountView(){
+    currentView = "home";
+    activeAccountId = null;
+    $("#accountView").style.display = "none";
+    $("#homeView").style.display = "block";
+    renderHome();
+  }
+
+  $("#backBtn").addEventListener("click", closeAccountView);
+
+  function renderAccountView(){
+    const acct = accounts.find(a => a.id === activeAccountId);
+    if(!acct){ closeAccountView(); return; }
+
+    const bal = accountBalance(acct.id);
+    const cls = balanceClass(bal);
+    $("#acctDetailName").textContent = acct.name;
+    $("#acctDetailBalance").textContent = (bal < 0 ? "-" : "") + fmtMoney(Math.abs(bal));
+    $("#acctDetailBalance").className = "amount mono " + cls;
+    $("#acctDetailSince").textContent = "Opened " + dateHeadingLabel(acct.balanceDate);
+    const descEl = $("#acctDetailDesc");
+    if(acct.description){
+      descEl.textContent = acct.description;
+      descEl.style.display = "block";
+    } else {
+      descEl.style.display = "none";
+    }
+
+    const list = entriesForAccount(acct.id).slice().sort((a,b) => a.dateMillis - b.dateMillis || a.id - b.id);
+    let running = 0;
+    list.forEach(e => { running += (e.credit||0) - (e.debit||0); e._running = running; });
+
+    $("#entryCount").textContent = list.length + (list.length === 1 ? " entry" : " entries");
+
+    const ledgerEl = $("#ledger");
+    ledgerEl.innerHTML = "";
+
+    if(list.length === 0){
+      ledgerEl.innerHTML = `<div class="empty-state">
+        <span class="serif">No entries yet</span>
+        Tap the + button to log a debit or credit.
+      </div>`;
+      return;
+    }
+
+    const displayList = list.slice().reverse();
+    let lastHeading = null;
+    displayList.forEach(entry => {
+      const heading = dateHeadingLabel(entry.dateMillis);
+      if(heading !== lastHeading){
+        const h = document.createElement("div");
+        h.className = "date-heading";
+        h.textContent = heading;
+        ledgerEl.appendChild(h);
+        lastHeading = heading;
+      }
+
+      const row = document.createElement("div");
+      row.className = "entry-row";
+      row.innerHTML = `
+        <div class="edate mono">${shortDate(entry.dateMillis)}</div>
+        <div class="edesc">${escapeHtml(entry.description || "—")}</div>
+        <div class="cols">
+          <div class="col debit ${entry.debit ? '' : 'empty'}">${entry.debit ? fmtMoney(entry.debit) : "—"}</div>
+          <div class="col credit ${entry.credit ? '' : 'empty'}">${entry.credit ? fmtMoney(entry.credit) : "—"}</div>
+        </div>
+        <div class="running">${(entry._running<0?"-":"") + fmtMoney(Math.abs(entry._running))}</div>
+      `;
+      row.addEventListener("click", () => openEditEntryModal(entry.id));
+      ledgerEl.appendChild(row);
+    });
+  }
+
+  /* ============ Add Account modal ============ */
+  const accountModalScrim = $("#accountModalScrim");
+
+  function updateAccountBalancePreview(){
+    const debit = parseFloat($("#aDebit").value) || 0;
+    const credit = parseFloat($("#aCredit").value) || 0;
+    const bal = credit - debit;
+    const el = $("#aBalancePreview");
+    el.textContent = (bal < 0 ? "-" : "") + fmtMoney(Math.abs(bal));
+    el.className = "val " + balanceClass(bal);
+  }
+  ["input"].forEach(evt => {
+    $("#aDebit").addEventListener(evt, updateAccountBalancePreview);
+    $("#aCredit").addEventListener(evt, updateAccountBalancePreview);
+  });
+
+  function openAddAccountModal(){
+    $("#aName").value = "";
+    $("#aDesc").value = "";
+    $("#aDate").value = todayDateInputValue();
+    $("#aDebit").value = "";
+    $("#aCredit").value = "";
+    updateAccountBalancePreview();
+    $("#accountFormError").style.display = "none";
+    accountModalScrim.classList.add("open");
+    setTimeout(() => $("#aName").focus(), 50);
+  }
+  $("#closeAccountModal").addEventListener("click", () => accountModalScrim.classList.remove("open"));
+  accountModalScrim.addEventListener("click", (e) => { if(e.target === accountModalScrim) accountModalScrim.classList.remove("open"); });
+
+  $("#saveAccountBtn").addEventListener("click", async () => {
+    const name = $("#aName").value.trim();
+    const description = $("#aDesc").value.trim();
+    const dateVal = $("#aDate").value || todayDateInputValue();
+    const debit = parseFloat($("#aDebit").value) || 0;
+    const credit = parseFloat($("#aCredit").value) || 0;
+
+    if(!name){
+      $("#accountFormError").textContent = "Account name is required.";
+      $("#accountFormError").style.display = "block";
+      return;
+    }
+
+    const balanceDate = dateMillisFromInput(dateVal);
+    const accountId = await put(ACCOUNTS, {name, description, balanceDate});
+
+    if(debit > 0){
+      await put(ENTRIES, {accountId, dateMillis: balanceDate, description:"Opening balance", debit, credit:0});
+    }
+    if(credit > 0){
+      await put(ENTRIES, {accountId, dateMillis: balanceDate, description:"Opening balance", debit:0, credit});
+    }
+
+    accountModalScrim.classList.remove("open");
+    await refresh();
+    showToast("Account created");
+  });
+
+  /* ============ Rename / delete account modal ============ */
+  const renameModalScrim = $("#renameModalScrim");
+
+  $("#editNameBtn").addEventListener("click", () => {
+    const acct = accounts.find(a => a.id === activeAccountId);
+    if(!acct) return;
+    $("#rName").value = acct.name;
+    $("#rDesc").value = acct.description || "";
+    $("#renameFormError").style.display = "none";
+    renameModalScrim.classList.add("open");
+  });
+  $("#closeRenameModal").addEventListener("click", () => renameModalScrim.classList.remove("open"));
+  renameModalScrim.addEventListener("click", (e) => { if(e.target === renameModalScrim) renameModalScrim.classList.remove("open"); });
+
+  $("#saveRenameBtn").addEventListener("click", async () => {
+    const name = $("#rName").value.trim();
+    const description = $("#rDesc").value.trim();
+    if(!name){
+      $("#renameFormError").textContent = "Account name is required.";
+      $("#renameFormError").style.display = "block";
+      return;
+    }
+    const acct = accounts.find(a => a.id === activeAccountId);
+    acct.name = name;
+    acct.description = description;
+    await put(ACCOUNTS, acct);
+    renameModalScrim.classList.remove("open");
+    await refresh();
+    renderAccountView();
+    showToast("Account updated");
+  });
+
+  $("#clearHistoryBtn").addEventListener("click", async () => {
+    const acct = accounts.find(a => a.id === activeAccountId);
+    if(!acct) return;
+    const acctEntries = entriesForAccount(acct.id);
+    if(acctEntries.length === 0){
+      showToast("This account has no history to clear");
+      return;
+    }
+    const confirmed = confirm(
+      `Clear all entries for "${acct.name}"?\n\n` +
+      `The account stays, but its balance resets to $0.00. This can't be undone.`
+    );
+    if(!confirmed) return;
+
+    for(const e of acctEntries){ await remove(ENTRIES, e.id); }
+    renameModalScrim.classList.remove("open");
+    await refresh();
+    renderAccountView();
+    showToast(`Cleared history for ${acct.name}`);
+  });
+
+  $("#deleteAccountBtn").addEventListener("click", async () => {
+    const acct = accounts.find(a => a.id === activeAccountId);
+    if(!acct) return;
+    if(confirm(`Delete "${acct.name}" and all its entries? This can't be undone.`)){
+      const relatedEntries = entriesForAccount(acct.id);
+      for(const e of relatedEntries){ await remove(ENTRIES, e.id); }
+      await remove(ACCOUNTS, acct.id);
+      renameModalScrim.classList.remove("open");
+      closeAccountView();
+      await refresh();
+      showToast("Account deleted");
+    }
+  });
+
+  /* ============ Add / edit entry modal ============ */
+  const entryModalScrim = $("#entryModalScrim");
+
+  function updateEntryBalancePreview(){
+    const debit = parseFloat($("#eDebit").value) || 0;
+    const credit = parseFloat($("#eCredit").value) || 0;
+    const currentBal = activeAccountId ? accountBalance(activeAccountId) : 0;
+    let delta = credit - debit;
+    if(editingEntryId !== null){
+      const existing = entries.find(e => e.id === editingEntryId);
+      if(existing) delta -= (existing.credit||0) - (existing.debit||0);
+    }
+    const bal = currentBal + delta;
+    const el = $("#eBalancePreview");
+    el.textContent = (bal < 0 ? "-" : "") + fmtMoney(Math.abs(bal));
+    el.className = "val " + balanceClass(bal);
+  }
+  $("#eDebit").addEventListener("input", updateEntryBalancePreview);
+  $("#eCredit").addEventListener("input", updateEntryBalancePreview);
+
+  function openAddEntryModal(){
+    editingEntryId = null;
+    $("#entryFormTitle").textContent = "Add Entry";
+    $("#eDate").value = todayDateInputValue();
+    $("#eDesc").value = "";
+    $("#eDebit").value = "";
+    $("#eCredit").value = "";
+    $("#deleteEntryBtn").style.display = "none";
+    updateEntryBalancePreview();
+    $("#entryFormError").style.display = "none";
+    entryModalScrim.classList.add("open");
+    setTimeout(() => $("#eDesc").focus(), 50);
+  }
+
+  function openEditEntryModal(entryId){
+    const entry = entries.find(e => e.id === entryId);
+    if(!entry) return;
+    editingEntryId = entryId;
+    $("#entryFormTitle").textContent = "Edit Entry";
+    $("#eDate").value = dateInputValueFromMillis(entry.dateMillis);
+    $("#eDesc").value = entry.description || "";
+    $("#eDebit").value = entry.debit || "";
+    $("#eCredit").value = entry.credit || "";
+    $("#deleteEntryBtn").style.display = "block";
+    updateEntryBalancePreview();
+    $("#entryFormError").style.display = "none";
+    entryModalScrim.classList.add("open");
+  }
+
+  $("#closeEntryModal").addEventListener("click", () => entryModalScrim.classList.remove("open"));
+  entryModalScrim.addEventListener("click", (e) => { if(e.target === entryModalScrim) entryModalScrim.classList.remove("open"); });
+
+  $("#saveEntryBtn").addEventListener("click", async () => {
+    const dateVal = $("#eDate").value || todayDateInputValue();
+    const desc = $("#eDesc").value.trim();
+    const debit = parseFloat($("#eDebit").value) || 0;
+    const credit = parseFloat($("#eCredit").value) || 0;
+
+    if(debit === 0 && credit === 0){
+      $("#entryFormError").textContent = "Enter a debit (owing) or credit (owed) amount.";
+      $("#entryFormError").style.display = "block";
+      return;
+    }
+
+    const entry = {
+      accountId: activeAccountId,
+      dateMillis: dateMillisFromInput(dateVal),
+      description: desc,
+      debit, credit
+    };
+    if(editingEntryId !== null) entry.id = editingEntryId;
+
+    await put(ENTRIES, entry);
+    entryModalScrim.classList.remove("open");
+    await refresh();
+    renderAccountView();
+    showToast(editingEntryId !== null ? "Entry updated" : "Entry saved");
+  });
+
+  $("#deleteEntryBtn").addEventListener("click", async () => {
+    if(editingEntryId === null) return;
+    if(confirm("Delete this entry?")){
+      await remove(ENTRIES, editingEntryId);
+      entryModalScrim.classList.remove("open");
+      await refresh();
+      renderAccountView();
+      showToast("Entry deleted");
+    }
+  });
+
+  /* ============ PDF export (per-account, all columns, no truncation) ============ */
+  function escapeHtmlStrict(str){
+    const div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML;
+  }
+
+  function exportAccountPdf(){
+    const acct = accounts.find(a => a.id === activeAccountId);
+    if(!acct) return;
+
+    const list = entriesForAccount(acct.id).slice().sort((a,b) => a.dateMillis - b.dateMillis || a.id - b.id);
+    let running = 0;
+    const rowsHtml = list.map(e => {
+      running += (e.credit||0) - (e.debit||0);
+      const dateStr = new Date(e.dateMillis).toLocaleDateString("en-US", {year:"numeric", month:"short", day:"numeric"});
+      return `<tr>
+        <td>${dateStr}</td>
+        <td>${escapeHtmlStrict(e.description || "—")}</td>
+        <td class="num">${e.debit ? fmtMoney(e.debit) : "—"}</td>
+        <td class="num">${e.credit ? fmtMoney(e.credit) : "—"}</td>
+        <td class="num">${(running<0?"-":"") + fmtMoney(Math.abs(running))}</td>
+      </tr>`;
+    }).join("");
+
+    const bal = accountBalance(acct.id);
+    const balLabel = balanceStampLabel(bal);
+    const generated = new Date().toLocaleString("en-US");
+
+    $("#printArea").innerHTML = `
+      <div class="print-header">
+        <h1>Pocket Ledger — ${escapeHtmlStrict(acct.name)}</h1>
+        ${acct.description ? `<div class="meta">${escapeHtmlStrict(acct.description)}</div>` : ""}
+        <div class="meta">Balance date: ${new Date(acct.balanceDate).toLocaleDateString("en-US")}</div>
+        <div class="meta">Generated: ${generated}</div>
+        <div class="balance">Account Balance: ${(bal<0?"-":"") + fmtMoney(Math.abs(bal))} (${balLabel})</div>
+      </div>
+      <table class="print-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th class="num">Owing (Debit)</th>
+            <th class="num">Owed (Credit)</th>
+            <th class="num">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || `<tr><td colspan="5">No transactions recorded yet.</td></tr>`}
+        </tbody>
+      </table>
+    `;
+
+    window.print();
+  }
+
+  $("#exportPdfBtn").addEventListener("click", exportAccountPdf);
+
+  /* ============ FAB (context-aware) ============ */
+  $("#fabAdd").addEventListener("click", () => {
+    if(currentView === "home") openAddAccountModal();
+    else openAddEntryModal();
+  });
+
+  /* ============ CSV export (all accounts, flattened) ============ */
+  function csvSafe(str){
+    const cleaned = String(str).replace(/\r/g, " ").replace(/\n/g, " ");
+    return '"' + cleaned.replace(/"/g, '""') + '"';
+  }
+
+  function buildCsv(){
+    const headers = ["Account Name","Date","Description","Debit (Owing)","Credit (Owed)","Balance After Entry"];
+    const rows = [headers.map(csvSafe).join(",")];
+
+    accounts.slice().sort((a,b) => a.name.localeCompare(b.name)).forEach(acct => {
+      const list = entriesForAccount(acct.id).slice().sort((a,b) => a.dateMillis - b.dateMillis || a.id - b.id);
+      let running = 0;
+      list.forEach(e => {
+        running += (e.credit||0) - (e.debit||0);
+        const dateStr = new Date(e.dateMillis).toISOString().slice(0,10);
+        rows.push([
+          acct.name, dateStr, e.description || "",
+          (e.debit||0).toFixed(2), (e.credit||0).toFixed(2), running.toFixed(2)
+        ].map(csvSafe).join(","));
+      });
+      if(list.length === 0){
+        const dateStr = new Date(acct.balanceDate).toISOString().slice(0,10);
+        rows.push([acct.name, dateStr, "No entries yet", "0.00", "0.00", "0.00"].map(csvSafe).join(","));
+      }
+    });
+    return rows.join("\r\n");
+  }
+
+  $("#clearAllBtn").addEventListener("click", async () => {
+    const settledAccountIds = new Set(
+      accounts.filter(a => Math.abs(accountBalance(a.id)) < 0.004).map(a => a.id)
+    );
+    const entriesToClear = entries.filter(e => settledAccountIds.has(e.accountId));
+
+    if(entriesToClear.length === 0){
+      showToast("No settled accounts have records to clear");
+      return;
+    }
+
+    const affectedCount = new Set(entriesToClear.map(e => e.accountId)).size;
+    const confirmed = confirm(
+      "Clear records for settled accounts?\n\n" +
+      `This deletes every debit and credit entry for ${affectedCount} account${affectedCount === 1 ? "" : "s"} ` +
+      "currently at a $0.00 balance. Accounts with an unsettled balance are left untouched. This can't be undone."
+    );
+    if(!confirmed) return;
+
+    for(const e of entriesToClear){ await remove(ENTRIES, e.id); }
+    await refresh();
+    renderHome();
+    showToast(`Cleared records for ${affectedCount} settled account${affectedCount === 1 ? "" : "s"}`);
+  });
+
+  $("#exportBtn").addEventListener("click", () => {
+    if(accounts.length === 0){
+      showToast("No accounts to export yet");
+      return;
+    }
+    const csv = buildCsv();
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().replace(/[:.]/g,"-").slice(0,16);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pocket_ledger_${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${accounts.length} accounts`);
+  });
+
+  /* ============ Toast ============ */
+  let toastTimer;
+  function showToast(msg){
+    const t = $("#toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  /* ============ Online / offline status ============ */
+  // Data entry (accounts, entries, balances) lives entirely in IndexedDB and
+  // works identically online or offline — nothing about it needs a network
+  // connection. This pill exists purely as a visible signal for the person
+  // using the app, and as the single source of truth other code can check
+  // before attempting anything that genuinely needs a connection (currently:
+  // nothing in the core app does — web fonts and the ad slot are the only
+  // network-dependent pieces, and both already degrade silently).
+  function updateOnlineStatus(){
+    const pill = $("#offlinePill");
+    if(navigator.onLine){
+      pill.classList.remove("show");
+    } else {
+      pill.classList.add("show");
+    }
+  }
+  window.addEventListener("online", updateOnlineStatus);
+  window.addEventListener("offline", updateOnlineStatus);
+
+  /* ============ PWA: install prompt + service worker ============ */
+  const INSTALL_DISMISS_KEY = "pocket_ledger_install_dismissed";
+  let deferredInstallPrompt = null;
+
+  function isStandaloneDisplay(){
+    return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
+  function isIosDevice(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  }
+  function installDismissed(){
+    try { return localStorage.getItem(INSTALL_DISMISS_KEY) === "1"; } catch(e){ return false; }
+  }
+  function setInstallDismissed(){
+    try { localStorage.setItem(INSTALL_DISMISS_KEY, "1"); } catch(e){}
+  }
+
+  function showInstallBanner(mode){
+    if(isStandaloneDisplay() || installDismissed()) return;
+    const banner = $("#installBanner");
+    if(!banner) return;
+    if(mode === "ios"){
+      $("#installBannerText").textContent = 'Install: tap Share, then "Add to Home Screen."';
+      $("#installBtn").style.display = "none";
+    } else {
+      $("#installBannerText").textContent = "Install Pocket Ledger for quick access from your home screen.";
+      $("#installBtn").style.display = "inline-flex";
+    }
+    banner.style.display = "flex";
+  }
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showInstallBanner("standard");
+  });
+
+  window.addEventListener("appinstalled", () => {
+    const banner = $("#installBanner");
+    if(banner) banner.style.display = "none";
+    deferredInstallPrompt = null;
+    showToast("Pocket Ledger installed");
+  });
+
+  if($("#installBtn")){
+    $("#installBtn").addEventListener("click", async () => {
+      if(!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      $("#installBanner").style.display = "none";
+    });
+  }
+  if($("#dismissInstallBtn")){
+    $("#dismissInstallBtn").addEventListener("click", () => {
+      $("#installBanner").style.display = "none";
+      setInstallDismissed();
+    });
+  }
+
+  if(isIosDevice()) showInstallBanner("ios");
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js")
+        .catch(err => console.warn("Service worker registration failed:", err));
+    });
+  }
+
+  /* ============ Boot ============ */
+  async function refresh(){
+    accounts = await getAll(ACCOUNTS);
+    entries = await getAll(ENTRIES);
+    if(currentView === "home") renderHome();
+  }
+
+  openDb().then(async (database) => {
+    db = database;
+    await refresh();
+    renderHome();
+    updateOnlineStatus();
+  }).catch(err => {
+    console.error("IndexedDB failed to open:", err);
+    document.getElementById("accountList").innerHTML =
+      '<div class="empty-state"><span class="serif">Storage unavailable</span>This browser blocked local storage, so accounts can\'t be saved.</div>';
+  });
+
+})();
+</script>
+</body>
+</html>
